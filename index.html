@@ -10,10 +10,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   
   <style>
-    .status-merger-completed { @apply bg-green-100 text-green-700; }
-    .status-merger-announced { @apply bg-blue-100 text-blue-700; }
-    .status-merger-active { @apply bg-yellow-100 text-yellow-700; }
-    .status-unknown { @apply bg-gray-100 text-gray-700; }
+    /* আমরা এখন আর এই ক্লাসগুলোর দরকার নেই, কারণ সব JS-এ হ্যান্ডেল করবো */
   </style>
 </head>
 <body class="bg-background text-foreground min-h-screen">
@@ -39,9 +36,8 @@
               <path d="m6 9 6 6 6-6"></path>
             </svg>
           </button>
-          <div id="statusDropdown" class="absolute hidden mt-1 w-full rounded-md border border-input bg-white shadow-lg z-10">
-            <button class="block w-full text-left px-3 py-2 text-sm hover:bg-accent" data-status="all">All Status</button>
-            <!-- Options will be injected here dynamically -->
+          <div id="statusDropdown" class="absolute hidden mt-1 w-full rounded-md border border-input bg-background shadow-lg z-10">
+            <!-- Options dynamically added -->
           </div>
         </div>
 
@@ -104,7 +100,7 @@
     let currentPage = 1;
     const perPage = 20;
     let filteredData = [];
-    let currentStatusFilter = 'all'; // Default: all
+    let currentStatusFilter = 'all';
 
     async function fetchAllSPACs() {
       let page = 1;
@@ -140,10 +136,10 @@
           };
         });
 
-        // Extract unique statuses and populate dropdown
+        // Populate status dropdown
         const uniqueStatuses = ['All Status', ...new Set(allData.map(item => item.status))];
         const dropdown = document.getElementById('statusDropdown');
-        dropdown.innerHTML = ''; // Clear "All Status" placeholder
+        dropdown.innerHTML = '';
 
         uniqueStatuses.forEach(status => {
           const btn = document.createElement('button');
@@ -159,13 +155,6 @@
           dropdown.appendChild(btn);
         });
 
-        if (allData.length === 0) {
-          document.getElementById('spacTableBody').innerHTML = `<tr><td colspan="8" class="p-12 text-center text-muted-foreground">No SPACs found.</td></tr>`;
-          document.getElementById('totalCount').textContent = 0;
-          document.getElementById('showingCount').textContent = 0;
-          return;
-        }
-
       } catch (error) {
         document.getElementById('spacTableBody').innerHTML = `<tr><td colspan="8" class="p-12 text-center text-red-600">Error: ${error.message}</td></tr>`;
         console.error(error);
@@ -177,12 +166,20 @@
       updatePagination();
     }
 
+    // Updated status class function
     function getStatusClass(status) {
       const lower = status.toLowerCase();
-      if (lower.includes('completed')) return 'status-merger-completed';
-      if (lower.includes('announced')) return 'status-merger-announced';
-      if (lower.includes('active')) return 'status-merger-active';
-      return 'status-unknown';
+
+      if (lower.includes('completed')) {
+        return 'bg-green-100 text-green-700';
+      }
+      if (lower.includes('announced')) {
+        return 'bg-blue-100 text-blue-700';
+      }
+      if (lower.includes('active')) {
+        return 'bg-yellow-100 text-yellow-700';
+      }
+      return 'bg-gray-100 text-gray-700';
     }
 
     function applyFilters() {
@@ -213,62 +210,66 @@
 
       if (pageData.length === 0) {
         tableBody.innerHTML = `<tr><td colspan="8" class="p-12 text-center text-muted-foreground">No results found.</td></tr>`;
-      } else {
-        pageData.forEach((item, idx) => {
-          const isPositive = item.changeRaw.trim().startsWith('+');
-          const isNegative = item.changeRaw.includes('-') && !isPositive;
-          const statusClass = getStatusClass(item.status);
-
-          const row = document.createElement('tr');
-          row.className = 'border-b hover:bg-muted/50 transition-colors';
-          row.innerHTML = `
-            <td class="p-4">
-              <div class="flex items-center gap-2">
-                <button class="h-6 w-6 rounded-md hover:bg-accent">
-                  <svg class="w-4 h-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"></path>
-                  </svg>
-                </button>
-                <span class="font-medium">${start + idx + 1}</span>
-              </div>
-            </td>
-            <td class="p-4">
-              <a href="${item.href}" class="block">
-                <div class="flex items-center gap-3 hover:text-primary transition-colors">
-                  <div class="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
-                    <span class="text-primary font-bold text-xs">${item.ticker[0] || '?'}</span>
-                  </div>
-                  <div>
-                    <div class="font-semibold">${item.ticker}</div>
-                    <div class="text-sm text-muted-foreground">${item.name}</div>
-                  </div>
-                </div>
-              </a>
-            </td>
-            <td class="p-4 text-right font-semibold">${item.price}</td>
-            <td class="p-4 text-right">
-              <div class="font-semibold ${isPositive ? 'text-green-600' : isNegative ? 'text-red-600' : 'text-muted-foreground'}">
-                ${item.changeRaw}
-              </div>
-            </td>
-            <td class="p-4 text-right">${item.volume}</td>
-            <td class="p-4 text-right font-medium">${item.marketCap}</td>
-            <td class="p-4">
-              <span class="inline-flex px-2 py-1 rounded-full text-xs font-medium ${statusClass}">
-                ${item.status || 'Unknown'}
-              </span>
-            </td>
-            <td class="p-4">
-              <a href="${item.href}">
-                <button class="h-9 px-3 rounded-md border border-input bg-background hover:bg-accent text-sm font-medium">
-                  View
-                </button>
-              </a>
-            </td>
-          `;
-          tableBody.appendChild(row);
-        });
+        document.getElementById('showingCount').textContent = 0;
+        document.getElementById('totalCount').textContent = filteredData.length;
+        return;
       }
+
+      pageData.forEach((item, idx) => {
+        const isPositive = item.changeRaw.trim().startsWith('+');
+        const isNegative = item.changeRaw.includes('-') && !isPositive;
+
+        const statusClasses = getStatusClass(item.status);
+
+        const row = document.createElement('tr');
+        row.className = 'border-b hover:bg-muted/50 transition-colors';
+        row.innerHTML = `
+          <td class="p-4">
+            <div class="flex items-center gap-2">
+              <button class="h-6 w-6 rounded-md hover:bg-accent">
+                <svg class="w-4 h-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"></path>
+                </svg>
+              </button>
+              <span class="font-medium">${start + idx + 1}</span>
+            </div>
+          </td>
+          <td class="p-4">
+            <a href="${item.href}" class="block">
+              <div class="flex items-center gap-3 hover:text-primary transition-colors">
+                <div class="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+                  <span class="text-primary font-bold text-xs">${item.ticker[0] || '?'}</span>
+                </div>
+                <div>
+                  <div class="font-semibold">${item.ticker}</div>
+                  <div class="text-sm text-muted-foreground">${item.name}</div>
+                </div>
+              </div>
+            </a>
+          </td>
+          <td class="p-4 text-right font-semibold">${item.price}</td>
+          <td class="p-4 text-right">
+            <div class="font-semibold ${isPositive ? 'text-green-600' : isNegative ? 'text-red-600' : 'text-muted-foreground'}">
+              ${item.changeRaw}
+            </div>
+          </td>
+          <td class="p-4 text-right">${item.volume}</td>
+          <td class="p-4 text-right font-medium">${item.marketCap}</td>
+          <td class="p-4">
+            <span class="inline-flex px-2 py-1 rounded-full text-xs font-medium ${statusClasses}">
+              ${item.status || 'Unknown'}
+            </span>
+          </td>
+          <td class="p-4">
+            <a href="${item.href}">
+              <button class="h-9 px-3 rounded-md border border-input bg-background hover:bg-accent text-sm font-medium">
+                View
+              </button>
+            </a>
+          </td>
+        `;
+        tableBody.appendChild(row);
+      });
 
       document.getElementById('showingCount').textContent = pageData.length;
       document.getElementById('totalCount').textContent = filteredData.length;
@@ -281,22 +282,18 @@
       document.getElementById('nextBtn').disabled = currentPage >= totalPages;
     }
 
-    // Search input
+    // Event Listeners
     document.getElementById('searchInput').addEventListener('input', applyFilters);
 
-    // Dropdown toggle
-    document.getElementById('statusFilterBtn').addEventListener('click', () => {
+    document.getElementById('statusFilterBtn').addEventListener('click', (e) => {
+      e.stopPropagation();
       document.getElementById('statusDropdown').classList.toggle('hidden');
     });
 
-    // Close dropdown when clicking outside
-    document.addEventListener('click', (e) => {
-      if (!document.getElementById('statusFilterBtn').contains(e.target)) {
-        document.getElementById('statusDropdown').classList.add('hidden');
-      }
+    document.addEventListener('click', () => {
+      document.getElementById('statusDropdown').classList.add('hidden');
     });
 
-    // Pagination
     document.getElementById('prevBtn').addEventListener('click', () => {
       if (currentPage > 1) { currentPage--; renderTable(); updatePagination(); }
     });
@@ -306,7 +303,7 @@
       if (currentPage < totalPages) { currentPage++; renderTable(); updatePagination(); }
     });
 
-    // Load data
+    // Start
     fetchAllSPACs();
   </script>
 </body>
