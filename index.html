@@ -30,12 +30,21 @@
           </svg>
           <input id="searchInput" class="w-full pl-10 h-10 rounded-md border border-input bg-background" placeholder="Search by name or symbol..." />
         </div>
-        <button id="statusFilter" class="flex h-10 items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm w-full md:w-[200px]">
-          <span>All Status</span>
-          <svg class="w-4 h-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="m6 9 6 6 6-6"></path>
-          </svg>
-        </button>
+
+        <!-- Status Filter Dropdown -->
+        <div class="relative">
+          <button id="statusFilterBtn" class="flex h-10 items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm w-full md:w-[200px]">
+            <span id="statusFilterText">All Status</span>
+            <svg class="w-4 h-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="m6 9 6 6 6-6"></path>
+            </svg>
+          </button>
+          <div id="statusDropdown" class="absolute hidden mt-1 w-full rounded-md border border-input bg-white shadow-lg z-10">
+            <button class="block w-full text-left px-3 py-2 text-sm hover:bg-accent" data-status="all">All Status</button>
+            <!-- Options will be injected here dynamically -->
+          </div>
+        </div>
+
         <button class="inline-flex items-center gap-2 h-10 px-4 rounded-md border border-input bg-background hover:bg-accent">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline>
@@ -64,7 +73,6 @@
               </tr>
             </thead>
             <tbody id="spacTableBody">
-              <!-- Loading state -->
               <tr id="loadingRow">
                 <td colspan="8" class="p-12 text-center">
                   <div class="flex flex-col items-center justify-center gap-4">
@@ -89,13 +97,14 @@
     </section>
   </div>
 
-  <!-- Data Fetching & Rendering Script -->
+  <!-- Script -->
   <script>
     const API_BASE = 'https://niekosniekos2.pixelora.studio/wp-json/wp/v2/spacs';
     let allData = [];
     let currentPage = 1;
     const perPage = 20;
     let filteredData = [];
+    let currentStatusFilter = 'all'; // Default: all
 
     async function fetchAllSPACs() {
       let page = 1;
@@ -113,50 +122,52 @@
         } while (true);
 
         allData = fetched.map((item, index) => {
-          // Get raw 24h value from last24h_hours (e.g., "-1.08%" or "+2.5%" or "-1.08")
           let raw24h = item.meta.last24h_hours || '0';
-
-          // Clean it: remove $ if present, ensure it ends with % or add if it's just number
-          raw24h = raw24h.replace(/^\$-?/, '-').replace(/^\$/, ''); // Handle $-1.08 or $1.08
-          if (!raw24h.includes('%')) {
-            raw24h += '%'; // Assume it's percentage if no %
-          }
+          raw24h = raw24h.replace(/^\$-?/, '-').replace(/^\$/, '');
+          if (!raw24h.includes('%')) raw24h += '%';
 
           return {
             rank: index + 1,
             name: item.meta.title || item.slug.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || 'Unknown',
             ticker: item.meta.symbol || 'N/A',
             price: item.meta.open || item.meta.prev_close || '$10.00',
-            changeRaw: raw24h, // Direct value to display
+            changeRaw: raw24h,
             volume: item.meta.avg_volume || item.meta.volume_24h || 'N/A',
             marketCap: item.meta.market_cap || 'N/A',
-            status: item.meta.status || 'Active',
+            status: item.meta.status || 'Unknown',
             href: item.link,
             slug: item.slug
           };
         });
 
+        // Extract unique statuses and populate dropdown
+        const uniqueStatuses = ['All Status', ...new Set(allData.map(item => item.status))];
+        const dropdown = document.getElementById('statusDropdown');
+        dropdown.innerHTML = ''; // Clear "All Status" placeholder
+
+        uniqueStatuses.forEach(status => {
+          const btn = document.createElement('button');
+          btn.className = 'block w-full text-left px-3 py-2 text-sm hover:bg-accent';
+          btn.textContent = status;
+          btn.dataset.status = status === 'All Status' ? 'all' : status;
+          btn.addEventListener('click', () => {
+            currentStatusFilter = btn.dataset.status;
+            document.getElementById('statusFilterText').textContent = status;
+            document.getElementById('statusDropdown').classList.add('hidden');
+            applyFilters();
+          });
+          dropdown.appendChild(btn);
+        });
+
         if (allData.length === 0) {
-          document.getElementById('spacTableBody').innerHTML = `
-            <tr>
-              <td colspan="8" class="p-12 text-center text-muted-foreground">
-                No SPACs found.
-              </td>
-            </tr>
-          `;
+          document.getElementById('spacTableBody').innerHTML = `<tr><td colspan="8" class="p-12 text-center text-muted-foreground">No SPACs found.</td></tr>`;
           document.getElementById('totalCount').textContent = 0;
           document.getElementById('showingCount').textContent = 0;
           return;
         }
 
       } catch (error) {
-        document.getElementById('spacTableBody').innerHTML = `
-          <tr>
-            <td colspan="8" class="p-12 text-center text-red-600">
-              Error loading data: ${error.message}. Please try again later.
-            </td>
-          </tr>
-        `;
+        document.getElementById('spacTableBody').innerHTML = `<tr><td colspan="8" class="p-12 text-center text-red-600">Error: ${error.message}</td></tr>`;
         console.error(error);
         return;
       }
@@ -174,6 +185,24 @@
       return 'status-unknown';
     }
 
+    function applyFilters() {
+      const query = document.getElementById('searchInput').value.toLowerCase().trim();
+
+      filteredData = allData.filter(item => {
+        const matchesSearch = query === '' || 
+          item.name.toLowerCase().includes(query) || 
+          item.ticker.toLowerCase().includes(query);
+
+        const matchesStatus = currentStatusFilter === 'all' || item.status === currentStatusFilter;
+
+        return matchesSearch && matchesStatus;
+      });
+
+      currentPage = 1;
+      renderTable();
+      updatePagination();
+    }
+
     function renderTable() {
       const tableBody = document.getElementById('spacTableBody');
       tableBody.innerHTML = '';
@@ -183,20 +212,11 @@
       const pageData = filteredData.slice(start, end);
 
       if (pageData.length === 0) {
-        tableBody.innerHTML = `
-          <tr>
-            <td colspan="8" class="p-12 text-center text-muted-foreground">
-              No results found.
-            </td>
-          </tr>
-        `;
+        tableBody.innerHTML = `<tr><td colspan="8" class="p-12 text-center text-muted-foreground">No results found.</td></tr>`;
       } else {
         pageData.forEach((item, idx) => {
-          // Determine color: green if starts with +, red if -, gray if 0
           const isPositive = item.changeRaw.trim().startsWith('+');
           const isNegative = item.changeRaw.includes('-') && !isPositive;
-          const isZero = parseFloat(item.changeRaw) === 0;
-
           const statusClass = getStatusClass(item.status);
 
           const row = document.createElement('tr');
@@ -213,7 +233,7 @@
               </div>
             </td>
             <td class="p-4">
-              <a href="${item.href}" class="block" target="_blank" rel="noopener noreferrer">
+              <a href="${item.href}" class="block">
                 <div class="flex items-center gap-3 hover:text-primary transition-colors">
                   <div class="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
                     <span class="text-primary font-bold text-xs">${item.ticker[0] || '?'}</span>
@@ -239,7 +259,7 @@
               </span>
             </td>
             <td class="p-4">
-              <a href="${item.href}" target="_blank" rel="noopener noreferrer">
+              <a href="${item.href}">
                 <button class="h-9 px-3 rounded-md border border-input bg-background hover:bg-accent text-sm font-medium">
                   View
                 </button>
@@ -261,36 +281,29 @@
       document.getElementById('nextBtn').disabled = currentPage >= totalPages;
     }
 
-    // Search
-    document.getElementById('searchInput').addEventListener('input', (e) => {
-      const query = e.target.value.toLowerCase().trim();
-      filteredData = query === ''
-        ? [...allData]
-        : allData.filter(item => 
-            item.name.toLowerCase().includes(query) || 
-            item.ticker.toLowerCase().includes(query)
-          );
-      currentPage = 1;
-      renderTable();
-      updatePagination();
+    // Search input
+    document.getElementById('searchInput').addEventListener('input', applyFilters);
+
+    // Dropdown toggle
+    document.getElementById('statusFilterBtn').addEventListener('click', () => {
+      document.getElementById('statusDropdown').classList.toggle('hidden');
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!document.getElementById('statusFilterBtn').contains(e.target)) {
+        document.getElementById('statusDropdown').classList.add('hidden');
+      }
     });
 
     // Pagination
     document.getElementById('prevBtn').addEventListener('click', () => {
-      if (currentPage > 1) {
-        currentPage--;
-        renderTable();
-        updatePagination();
-      }
+      if (currentPage > 1) { currentPage--; renderTable(); updatePagination(); }
     });
 
     document.getElementById('nextBtn').addEventListener('click', () => {
       const totalPages = Math.ceil(filteredData.length / perPage);
-      if (currentPage < totalPages) {
-        currentPage++;
-        renderTable();
-        updatePagination();
-      }
+      if (currentPage < totalPages) { currentPage++; renderTable(); updatePagination(); }
     });
 
     // Load data
