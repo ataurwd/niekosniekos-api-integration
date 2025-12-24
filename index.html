@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SpacListing.com - Mapping the World's Tech Ecosystems</title>
+  <meta name="description" content="The source of record on startups, innovation, high-growth companies, venture capital and tech ecosystems globally." />
+  
+  <!-- Tailwind CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <style>
+    .status-merger-completed { @apply bg-green-100 text-green-700; }
+    .status-merger-announced { @apply bg-blue-100 text-blue-700; }
+    .status-merger-active { @apply bg-yellow-100 text-yellow-700; }
+    .status-unknown { @apply bg-gray-100 text-gray-700; }
+  </style>
+</head>
+<body class="bg-background text-foreground min-h-screen">
+
+  <div class="container mx-auto px-6 py-8 max-w-7xl">
+
+    <!-- Search & Filters -->
+    <section class="py-8 border-b border-border bg-muted/20">
+      <div class="flex flex-col md:flex-row gap-4">
+        <div class="flex-1 relative">
+          <svg class="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.3-4.3"></path>
+          </svg>
+          <input id="searchInput" class="w-full pl-10 h-10 rounded-md border border-input bg-background" placeholder="Search by name or symbol..." />
+        </div>
+        <button id="statusFilter" class="flex h-10 items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm w-full md:w-[200px]">
+          <span>All Status</span>
+          <svg class="w-4 h-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path d="m6 9 6 6 6-6"></path>
+          </svg>
+        </button>
+        <button class="inline-flex items-center gap-2 h-10 px-4 rounded-md border border-input bg-background hover:bg-accent">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline>
+            <polyline points="16 7 22 7 22 13"></polyline>
+          </svg>
+          More Filters
+        </button>
+      </div>
+    </section>
+
+    <!-- Table -->
+    <section class="py-8">
+      <div class="rounded-lg border bg-card shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="border-b">
+              <tr>
+                <th class="h-12 px-4 text-left font-medium text-muted-foreground w-[80px]">#</th>
+                <th class="h-12 px-4 text-left font-medium text-muted-foreground">Name</th>
+                <th class="h-12 px-4 text-right font-medium text-muted-foreground">Price</th>
+                <th class="h-12 px-4 text-right font-medium text-muted-foreground">24h %</th>
+                <th class="h-12 px-4 text-right font-medium text-muted-foreground">Volume</th>
+                <th class="h-12 px-4 text-right font-medium text-muted-foreground">Market Cap</th>
+                <th class="h-12 px-4 text-left font-medium text-muted-foreground">Status</th>
+                <th class="h-12 px-4 w-[80px]"></th>
+              </tr>
+            </thead>
+            <tbody id="spacTableBody">
+              <!-- Loading state -->
+              <tr id="loadingRow">
+                <td colspan="8" class="p-12 text-center">
+                  <div class="flex flex-col items-center justify-center gap-4">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+                    <p class="text-muted-foreground">Loading SPACs data...</p>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between mt-6">
+        <p class="text-sm text-muted-foreground">Showing <span id="showingCount">0</span> of <span id="totalCount">0</span> SPACs</p>
+        <div class="flex gap-2">
+          <button id="prevBtn" disabled class="h-9 px-3 rounded-md border border-input bg-background hover:bg-accent disabled:opacity-50">Previous</button>
+          <span id="pageInfo" class="px-3 py-2">Page 1</span>
+          <button id="nextBtn" class="h-9 px-3 rounded-md border border-input bg-background hover:bg-accent">Next</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Data Fetching & Rendering Script -->
+  <script>
+    const API_BASE = 'https://niekosniekos2.pixelora.studio/wp-json/wp/v2/spacs';
+    let allData = [];
+    let currentPage = 1;
+    const perPage = 20;
+    let filteredData = [];
+
+    async function fetchAllSPACs() {
+      let page = 1;
+      let fetched = [];
+
+      try {
+        do {
+          const response = await fetch(`${API_BASE}?per_page=100&page=${page}`);
+          if (!response.ok) throw new Error('Failed to fetch data');
+          const items = await response.json();
+          const totalPages = parseInt(response.headers.get('X-WP-TotalPages')) || 1;
+          fetched = fetched.concat(items);
+          page++;
+          if (page > totalPages) break;
+        } while (true);
+
+        allData = fetched.map((item, index) => {
+          // Get raw 24h value from last24h_hours (e.g., "-1.08%" or "+2.5%" or "-1.08")
+          let raw24h = item.meta.last24h_hours || '0';
+
+          // Clean it: remove $ if present, ensure it ends with % or add if it's just number
+          raw24h = raw24h.replace(/^\$-?/, '-').replace(/^\$/, ''); // Handle $-1.08 or $1.08
+          if (!raw24h.includes('%')) {
+            raw24h += '%'; // Assume it's percentage if no %
+          }
+
+          return {
+            rank: index + 1,
+            name: item.meta.title || item.slug.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || 'Unknown',
+            ticker: item.meta.symbol || 'N/A',
+            price: item.meta.open || item.meta.prev_close || '$10.00',
+            changeRaw: raw24h, // Direct value to display
+            volume: item.meta.avg_volume || item.meta.volume_24h || 'N/A',
+            marketCap: item.meta.market_cap || 'N/A',
+            status: item.meta.status || 'Active',
+            href: item.link,
+            slug: item.slug
+          };
+        });
+
+        if (allData.length === 0) {
+          document.getElementById('spacTableBody').innerHTML = `
+            <tr>
+              <td colspan="8" class="p-12 text-center text-muted-foreground">
+                No SPACs found.
+              </td>
+            </tr>
+          `;
+          document.getElementById('totalCount').textContent = 0;
+          document.getElementById('showingCount').textContent = 0;
+          return;
+        }
+
+      } catch (error) {
+        document.getElementById('spacTableBody').innerHTML = `
+          <tr>
+            <td colspan="8" class="p-12 text-center text-red-600">
+              Error loading data: ${error.message}. Please try again later.
+            </td>
+          </tr>
+        `;
+        console.error(error);
+        return;
+      }
+
+      filteredData = [...allData];
+      renderTable();
+      updatePagination();
+    }
+
+    function getStatusClass(status) {
+      const lower = status.toLowerCase();
+      if (lower.includes('completed')) return 'status-merger-completed';
+      if (lower.includes('announced')) return 'status-merger-announced';
+      if (lower.includes('active')) return 'status-merger-active';
+      return 'status-unknown';
+    }
+
+    function renderTable() {
+      const tableBody = document.getElementById('spacTableBody');
+      tableBody.innerHTML = '';
+
+      const start = (currentPage - 1) * perPage;
+      const end = start + perPage;
+      const pageData = filteredData.slice(start, end);
+
+      if (pageData.length === 0) {
+        tableBody.innerHTML = `
+          <tr>
+            <td colspan="8" class="p-12 text-center text-muted-foreground">
+              No results found.
+            </td>
+          </tr>
+        `;
+      } else {
+        pageData.forEach((item, idx) => {
+          // Determine color: green if starts with +, red if -, gray if 0
+          const isPositive = item.changeRaw.trim().startsWith('+');
+          const isNegative = item.changeRaw.includes('-') && !isPositive;
+          const isZero = parseFloat(item.changeRaw) === 0;
+
+          const statusClass = getStatusClass(item.status);
+
+          const row = document.createElement('tr');
+          row.className = 'border-b hover:bg-muted/50 transition-colors';
+          row.innerHTML = `
+            <td class="p-4">
+              <div class="flex items-center gap-2">
+                <button class="h-6 w-6 rounded-md hover:bg-accent">
+                  <svg class="w-4 h-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"></path>
+                  </svg>
+                </button>
+                <span class="font-medium">${start + idx + 1}</span>
+              </div>
+            </td>
+            <td class="p-4">
+              <a href="${item.href}" class="block">
+                <div class="flex items-center gap-3 hover:text-primary transition-colors">
+                  <div class="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+                    <span class="text-primary font-bold text-xs">${item.ticker[0] || '?'}</span>
+                  </div>
+                  <div>
+                    <div class="font-semibold">${item.ticker}</div>
+                    <div class="text-sm text-muted-foreground">${item.name}</div>
+                  </div>
+                </div>
+              </a>
+            </td>
+            <td class="p-4 text-right font-semibold">${item.price}</td>
+            <td class="p-4 text-right">
+              <div class="font-semibold ${isPositive ? 'text-green-600' : isNegative ? 'text-red-600' : 'text-muted-foreground'}">
+                ${item.changeRaw}
+              </div>
+            </td>
+            <td class="p-4 text-right">${item.volume}</td>
+            <td class="p-4 text-right font-medium">${item.marketCap}</td>
+            <td class="p-4">
+              <span class="inline-flex px-2 py-1 rounded-full text-xs font-medium ${statusClass}">
+                ${item.status || 'Unknown'}
+              </span>
+            </td>
+            <td class="p-4">
+              <a href="${item.href}">
+                <button class="h-9 px-3 rounded-md border border-input bg-background hover:bg-accent text-sm font-medium">
+                  View
+                </button>
+              </a>
+            </td>
+          `;
+          tableBody.appendChild(row);
+        });
+      }
+
+      document.getElementById('showingCount').textContent = pageData.length;
+      document.getElementById('totalCount').textContent = filteredData.length;
+    }
+
+    function updatePagination() {
+      const totalPages = Math.ceil(filteredData.length / perPage) || 1;
+      document.getElementById('pageInfo').textContent = `Page ${currentPage} of ${totalPages}`;
+      document.getElementById('prevBtn').disabled = currentPage === 1;
+      document.getElementById('nextBtn').disabled = currentPage >= totalPages;
+    }
+
+    // Search
+    document.getElementById('searchInput').addEventListener('input', (e) => {
+      const query = e.target.value.toLowerCase().trim();
+      filteredData = query === ''
+        ? [...allData]
+        : allData.filter(item => 
+            item.name.toLowerCase().includes(query) || 
+            item.ticker.toLowerCase().includes(query)
+          );
+      currentPage = 1;
+      renderTable();
+      updatePagination();
+    });
+
+    // Pagination
+    document.getElementById('prevBtn').addEventListener('click', () => {
+      if (currentPage > 1) {
+        currentPage--;
+        renderTable();
+        updatePagination();
+      }
+    });
+
+    document.getElementById('nextBtn').addEventListener('click', () => {
+      const totalPages = Math.ceil(filteredData.length / perPage);
+      if (currentPage < totalPages) {
+        currentPage++;
+        renderTable();
+        updatePagination();
+      }
+    });
+
+    // Load data
+    fetchAllSPACs();
+  </script>
+</body>
+</html>
