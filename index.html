@@ -293,6 +293,7 @@
     document.addEventListener('click', () => {
       document.getElementById('statusDropdown').classList.add('hidden');
     });
+    
 
     document.getElementById('prevBtn').addEventListener('click', () => {
       if (currentPage > 1) { currentPage--; renderTable(); updatePagination(); }
